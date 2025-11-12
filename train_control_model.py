@@ -1,7 +1,7 @@
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 from sklearn.preprocessing import LabelEncoder
@@ -14,14 +14,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- 1. Configuration ---
 INPUT_CSV_PATH = 'features_dataset.csv'
-TEST_SIZE = 0.3
+N_SPLITS = 10  # Number of folds for cross-validation
 RANDOM_STATE = 42
 
 def main():
     """
-    Main function to train and evaluate the control model.
+    Main function to train and evaluate the control model using K-Fold Cross-Validation.
     """
-    logging.info("Starting the training process for the control model...")
+    logging.info("Starting a more rigorous training process for the control model using Stratified K-Fold Cross-Validation...")
 
     # --- 2. Load and Prepare Data ---
     try:
@@ -30,73 +30,70 @@ def main():
         logging.error(f"Dataset not found at {INPUT_CSV_PATH}. Please run feature_extractor.py first.")
         return
 
-    # Handle potential missing values by filling with the mean of the column
     df = df.fillna(df.mean(numeric_only=True))
-
-    # Define features (X) and target (y)
     features = [col for col in df.columns if col not in ['label', 'filename']]
     X = df[features]
     y = df['label']
 
-    # Encode labels
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
 
-    # Split data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_encoded,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
-        stratify=y_encoded # Ensure proportional representation of labels
-    )
+    logging.info(f"Data loaded and prepared. Full dataset shape: {X.shape}")
 
-    logging.info(f"Data loaded and prepared. Training set shape: {X_train.shape}, Test set shape: {X_test.shape}")
+    # --- 3. K-Fold Cross-Validation ---
+    logging.info(f"Performing Stratified {N_SPLITS}-Fold Cross-Validation...")
 
-    # --- 3. Train the Random Forest Model ---
-    logging.info("Training the Random Forest Classifier...")
+    skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
 
-    # Initialize the model with balanced class weights
-    rf_classifier = RandomForestClassifier(
-        n_estimators=100,
-        random_state=RANDOM_STATE,
-        class_weight='balanced'
-    )
+    accuracies = []
+    total_cm = np.zeros((len(le.classes_), len(le.classes_)), dtype=int)
 
-    # Train the model
-    rf_classifier.fit(X_train, y_train)
+    for fold, (train_index, test_index) in enumerate(skf.split(X, y_encoded)):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y_encoded[train_index], y_encoded[test_index]
 
-    logging.info("Model training complete.")
+        # Initialize and train the model for this fold
+        rf_classifier = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, class_weight='balanced')
+        rf_classifier.fit(X_train, y_train)
 
-    # --- 4. Evaluate the Model ---
-    logging.info("Evaluating the model on the test set...")
+        # Evaluate
+        y_pred = rf_classifier.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        accuracies.append(accuracy)
 
-    y_pred = rf_classifier.predict(X_test)
+        # Aggregate confusion matrix
+        total_cm += confusion_matrix(y_test, y_pred, labels=np.arange(len(le.classes_)))
 
-    # Calculate accuracy
-    accuracy = accuracy_score(y_test, y_pred)
-    logging.info(f"Model Accuracy: {accuracy:.4f}")
+        logging.info(f"Fold {fold+1}/{N_SPLITS} - Accuracy: {accuracy:.4f}")
 
-    # Display detailed classification report
-    report = classification_report(y_test, y_pred, target_names=le.classes_)
-    logging.info("Classification Report:\n" + report)
+    # --- 4. Report Aggregated Results ---
+    mean_accuracy = np.mean(accuracies)
+    std_accuracy = np.std(accuracies)
 
-    # --- 5. Visualize Results (Confusion Matrix) ---
-    cm = confusion_matrix(y_test, y_pred)
+    logging.info("-" * 40)
+    logging.info("Cross-Validation Summary:")
+    logging.info(f"Mean Accuracy: {mean_accuracy:.4f}")
+    logging.info(f"Standard Deviation of Accuracy: {std_accuracy:.4f}")
+    logging.info("-" * 40)
+
+    # --- 5. Visualize Aggregated Confusion Matrix ---
     plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_)
-    plt.title('Confusion Matrix - Random Forest Control Model')
+    sns.heatmap(total_cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_)
+    plt.title(f'Aggregated Confusion Matrix ({N_SPLITS}-Fold Cross-Validation)')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
 
-    # Save the plot
-    confusion_matrix_path = 'confusion_matrix_control_model.png'
+    confusion_matrix_path = 'confusion_matrix_control_model_cv.png'
     plt.savefig(confusion_matrix_path)
-    logging.info(f"Confusion matrix saved to {confusion_matrix_path}")
+    logging.info(f"Aggregated confusion matrix saved to {confusion_matrix_path}")
 
-    # Display feature importances
-    feature_importances = pd.Series(rf_classifier.feature_importances_, index=features).sort_values(ascending=False)
-    logging.info("Top 5 Feature Importances:\n" + str(feature_importances.head()))
+    # --- 6. Final Model and Feature Importances ---
+    logging.info("Training a final model on the entire dataset to determine feature importances...")
+    final_model = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, class_weight='balanced')
+    final_model.fit(X, y_encoded)
 
+    feature_importances = pd.Series(final_model.feature_importances_, index=features).sort_values(ascending=False)
+    logging.info("Top 5 Feature Importances (from model trained on full dataset):\n" + str(feature_importances.head()))
 
 if __name__ == '__main__':
     main()
