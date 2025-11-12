@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -87,13 +88,24 @@ def main():
     plt.savefig(confusion_matrix_path)
     logging.info(f"Aggregated confusion matrix saved to {confusion_matrix_path}")
 
-    # --- 6. Final Model and Feature Importances ---
+    # --- 6. Save Results for Comparative Analysis ---
+    results = {
+        'accuracies': accuracies,
+        'confusion_matrix': total_cm.tolist(),
+        'labels': le.classes_.tolist()
+    }
+    with open('rf_results.json', 'w') as f:
+        json.dump(results, f, indent=4)
+    logging.info("Random Forest results saved to rf_results.json")
+
+    # --- 7. Final Model and Feature Importances ---
     logging.info("Training a final model on the entire dataset to determine feature importances...")
     final_model = RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, class_weight='balanced')
     final_model.fit(X, y_encoded)
 
     feature_importances = pd.Series(final_model.feature_importances_, index=features).sort_values(ascending=False)
     logging.info("Top 5 Feature Importances (from model trained on full dataset):\n" + str(feature_importances.head()))
+
 
 if __name__ == '__main__':
     main()

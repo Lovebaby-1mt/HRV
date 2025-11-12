@@ -10,6 +10,7 @@ from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -126,7 +127,7 @@ def main():
     logging.info(f"Standard Deviation of Accuracy: {std_accuracy:.4f}")
     logging.info("-" * 40)
 
-    # --- 5. Visualize Results ---
+    # --- 5. Visualize and Save Results ---
     plt.figure(figsize=(10, 8))
     sns.heatmap(total_cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_)
     plt.title(f'Aggregated CNN Confusion Matrix ({N_SPLITS}-Fold CV)')
@@ -134,6 +135,17 @@ def main():
     plt.ylabel('True Label')
     plt.savefig('confusion_matrix_cnn_model_cv.png')
     logging.info("Aggregated CNN confusion matrix saved to confusion_matrix_cnn_model_cv.png")
+
+    # --- 6. Save Results for Comparative Analysis ---
+    results = {
+        'accuracies': accuracies,
+        'confusion_matrix': total_cm.tolist(),
+        'labels': le.classes_.tolist()
+    }
+    with open('cnn_results.json', 'w') as f:
+        json.dump(results, f, indent=4)
+    logging.info("CNN results saved to cnn_results.json")
+
 
 if __name__ == '__main__':
     # Suppress TensorFlow informational messages
