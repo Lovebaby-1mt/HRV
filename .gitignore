@@ -1,0 +1,7 @@
+# Ignore generated datasets
+sedentary_dataset_py/
+sedentary_images_dataset_py/
+
+# Python cache files
+__pycache__/
+*.pyc

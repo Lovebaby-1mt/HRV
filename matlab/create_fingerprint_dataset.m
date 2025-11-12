@@ -43,7 +43,7 @@ for c = 1:length(categories)
     matFiles = dir(fullfile(inputCatDir, '*.mat'));
     
     for i = 1:length(matFiles)
-        matFileName = matFiles[i].name;
+        matFileName = matFiles(i).name;
         fullMatPath = fullfile(inputCatDir, matFileName);
         
         fprintf('处理文件: %s\n', matFileName);
