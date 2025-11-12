@@ -18,30 +18,59 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # --- 1. Configuration ---
 IMAGE_DIR = 'sedentary_images_dataset_py'
 CATEGORIES = ['relaxed', 'flow', 'stress', 'drowsiness']
-IMG_SIZE = (128, 128)  # Smaller size for faster training
+IMG_SIZE = (128, 128)
 N_SPLITS = 10
 BATCH_SIZE = 32
-EPOCHS = 15
+EPOCHS = 20  # Increased epochs for a deeper model
 RANDOM_STATE = 42
 
 def create_cnn_model(num_classes):
-    """Defines and compiles a simple CNN model."""
+    """Defines and compiles an optimized CNN model with data augmentation and batch normalization."""
+    data_augmentation = tf.keras.Sequential([
+        layers.RandomFlip("horizontal"),
+        layers.RandomRotation(0.1),
+        layers.RandomZoom(0.2),
+        layers.RandomContrast(0.2),
+    ])
+
     model = models.Sequential([
         layers.Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3)),
+        data_augmentation,
         layers.Rescaling(1./255),
-        layers.Conv2D(32, (3, 3), activation='relu'),
+
+        # Block 1
+        layers.Conv2D(32, (3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
         layers.MaxPooling2D((2, 2)),
-        layers.Conv2D(64, (3, 3), activation='relu'),
+
+        # Block 2
+        layers.Conv2D(64, (3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
         layers.MaxPooling2D((2, 2)),
-        layers.Conv2D(128, (3, 3), activation='relu'),
+
+        # Block 3
+        layers.Conv2D(128, (3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
         layers.MaxPooling2D((2, 2)),
+
+        # Block 4 - Added for more depth
+        layers.Conv2D(256, (3, 3), padding='same'),
+        layers.BatchNormalization(),
+        layers.Activation('relu'),
+        layers.MaxPooling2D((2, 2)),
+
+        # Top layers
         layers.Flatten(),
-        layers.Dense(128, activation='relu'),
+        layers.Dense(256, activation='relu'),
+        layers.BatchNormalization(),
         layers.Dropout(0.5),
         layers.Dense(num_classes, activation='softmax')
     ])
 
-    model.compile(optimizer='adam',
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
                   loss='sparse_categorical_crossentropy',
                   metrics=['accuracy'])
     return model
@@ -62,7 +91,7 @@ def create_dataset(paths, labels):
 
 def main():
     """Main function to train and evaluate the CNN model."""
-    logging.info("Starting CNN training with Stratified K-Fold Cross-Validation.")
+    logging.info("Starting CNN training with Stratified K-Fold Cross-Validation (Optimized Model).")
 
     # --- 2. Load File Paths and Labels ---
     if not os.path.exists(IMAGE_DIR):
@@ -94,23 +123,22 @@ def main():
     for fold, (train_index, test_index) in enumerate(skf.split(all_filepaths, y_encoded)):
         logging.info(f"--- Starting Fold {fold+1}/{N_SPLITS} ---")
 
-        # Split data for this fold
         X_train_paths, X_test_paths = all_filepaths[train_index], all_filepaths[test_index]
         y_train, y_test = y_encoded[train_index], y_encoded[test_index]
 
-        # Create tf.data datasets
         train_ds = create_dataset(X_train_paths, y_train).shuffle(buffer_size=len(y_train)).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
         test_ds = create_dataset(X_test_paths, y_test).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 
-        # Create and train the model
         model = create_cnn_model(num_classes)
-        model.fit(train_ds, epochs=EPOCHS, validation_data=test_ds, verbose=0)
 
-        # Evaluate
+        # Add a learning rate scheduler for better convergence
+        lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=3, verbose=0)
+
+        model.fit(train_ds, epochs=EPOCHS, validation_data=test_ds, callbacks=[lr_scheduler], verbose=0)
+
         loss, accuracy = model.evaluate(test_ds, verbose=0)
         accuracies.append(accuracy)
 
-        # Aggregate confusion matrix
         y_pred_probs = model.predict(test_ds, verbose=0)
         y_pred = np.argmax(y_pred_probs, axis=1)
         total_cm += confusion_matrix(y_test, y_pred, labels=np.arange(num_classes))
@@ -122,21 +150,21 @@ def main():
     std_accuracy = np.std(accuracies)
 
     logging.info("-" * 40)
-    logging.info("CNN Cross-Validation Summary:")
+    logging.info("Optimized CNN Cross-Validation Summary:")
     logging.info(f"Mean Accuracy: {mean_accuracy:.4f}")
     logging.info(f"Standard Deviation of Accuracy: {std_accuracy:.4f}")
     logging.info("-" * 40)
 
     # --- 5. Visualize and Save Results ---
     plt.figure(figsize=(10, 8))
-    sns.heatmap(total_cm, annot=True, fmt='d', cmap='Blues', xticklabels=le.classes_, yticklabels=le.classes_)
-    plt.title(f'Aggregated CNN Confusion Matrix ({N_SPLITS}-Fold CV)')
+    sns.heatmap(total_cm, annot=True, fmt='d', cmap='Greens', xticklabels=le.classes_, yticklabels=le.classes_)
+    plt.title(f'Aggregated Optimized CNN Confusion Matrix ({N_SPLITS}-Fold CV)')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-    plt.savefig('confusion_matrix_cnn_model_cv.png')
-    logging.info("Aggregated CNN confusion matrix saved to confusion_matrix_cnn_model_cv.png")
+    plt.savefig('confusion_matrix_cnn_model_optimized_cv.png')
+    logging.info("Aggregated Optimized CNN confusion matrix saved.")
 
-    # --- 6. Save Results for Comparative Analysis ---
+    # --- 6. Save Results ---
     results = {
         'accuracies': accuracies,
         'confusion_matrix': total_cm.tolist(),
@@ -144,10 +172,8 @@ def main():
     }
     with open('cnn_results.json', 'w') as f:
         json.dump(results, f, indent=4)
-    logging.info("CNN results saved to cnn_results.json")
-
+    logging.info("Optimized CNN results saved to cnn_results.json")
 
 if __name__ == '__main__':
-    # Suppress TensorFlow informational messages
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
     main()
