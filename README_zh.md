@@ -51,12 +51,12 @@ python3 train_control_model.py
 ```
 该步骤将训练随机森林模型，进行评估，并将其结果保存到`rf_results.json`中。
 
-**第四步：训练CNN模型**
+**第四步：训练优化后的CNN模型（建议在GPU环境中运行）**
 ```bash
 python3 train_cnn.py
 ```
-该步骤将训练CNN模型，进行评估，并将其结果保存到`cnn_results.json`中。
-*注意：当前`train_cnn.py`中包含了一个经过优化的深度模型架构，计算量较大，在资源有限的环境中可能会超时。*
+该步骤将训练我们最终优化后的CNN模型（包含数据增强和更深的网络结构），进行评估，并将其结果保存到`cnn_results.json`中。
+*重要提示：此脚本的计算量较大，是为在**GPU环境（如Google Colab, Kaggle Notebooks或云服务器）**中运行而设计的。在标准的CPU环境中，训练过程可能会非常缓慢或因超时而失败。*
 
 **第五步：生成对比可视化图表**
 ```bash
