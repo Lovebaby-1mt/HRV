@@ -4,70 +4,66 @@
 
 ## 核心理念：“生理指纹图”
 
-传统方法严重依赖于手动提取的HRV（心率变异性）数值特征，例如LF/HF比率。然而，这类特征对于上游信号处理中的微小峰值检测误差极为敏感，一个微小的错误便可能导致生理学结论的完全反转。
+传统方法严重依赖于手动提取的HRV（心率变异性）数值特征，这类特征对于信号处理中的微小误差极为敏感。我们的方法将研究范式从**“计算脆弱的数值”**转向**“学习鲁棒的形态”**。我们将生理信号快照可视化为一张2D图像——“生理指纹图”，并训练CNN来学习与各生理状态相关的全局形态特征。
 
-我们的方法，受多光谱分析的启发，将研究范式从**“计算脆弱的数值”**转向**“学习鲁棒的形态”**。我们将一个30秒的生理信号快照，可视化为一张2x2的图像，我们称之为“生理指纹图”。
+### 用于消融实验的指纹图版本
 
-该图像由四个子图构成：
-- **左上角:** 呼吸波形图
-- **右上角:** 心跳波形图
-- **左下角:** RR间期序列图
-- **右下角:** HRV功率谱密度图 (PSD)
+为了探究哪种生理信息的组合最为有效，我们设计了四种不同版本的指纹图进行对比实验：
 
-我们的核心假设是：CNN能够学习到这些图像中对应于不同生理状态的、全局且鲁棒的**形态学特征**，从而能有效忽略那些会干扰传统数值方法的局部“毛刺”（例如RR间期图中的野点）。
+-   **V1 (全信息版):** 一个2x2的图像，包含呼吸波形、心跳波形、RR间期序列图和HRV功率谱密度（PSD）。
+-   **V2 (纯HRV版):** 一个1x2的图像，仅包含RR间期序列图和HRV功率谱。
+-   **V3 (纯波形版):** 一个1x2的图像，仅包含呼吸波形和心跳波形。
+-   **V4 (极简版):** 一个1x1的图像，仅包含信息最浓缩的HRV功率谱。
 
 ## 代码库结构
 
-本项目已完全使用Python实现，构建了一个从数据仿真到模型对比的端到端流水线。
+本项目是一个端到端的Python流水线，覆盖了从数据仿真、模型训练到对比分析的全过程。
 
 -   `data_generator.py`: 仿真并生成四种生理状态的高保真`.npz`数据文件。
--   `signal_processor.py`: 包含核心的信号处理逻辑，用于从原始数据中提取呼吸、心跳、RR间期和PSD等中间信号。
--   `fingerprint_generator.py`: 调用上述脚本，将仿真的`.npz`数据转化为2D的“生理指纹图”`.png`图像。
--   `feature_extractor.py`: 一条并行的流水线，用于从信号中提取传统的数值特征（如SDNN, RMSSD, LF/HF比率），并创建一个`.csv`数据集用于训练基线模型。
--   `train_control_model.py`: 使用**分层K折交叉验证**，在数值特征上训练并评估一个强大的基线模型（随机森林）。
--   `train_cnn.py`: 使用同样的交叉验证框架，在“生理指纹图”图像上训练并评估我们的核心CNN模型，以确保公平对比。
--   `generate_comparative_plots.py`: 一个专门的脚本，用于加载两个模型保存的结果，并生成一套用于学术出版的、高质量的对比可视化图表。
--   `requirements.txt`: 包含复现项目环境所需的所有Python依赖包。
+-   `signal_processor.py`: 包含从原始数据中提取呼吸、心跳、RR间期和PSD等中间信号的核心逻辑。
+-   `fingerprint_generator.py`: 一个参数化的脚本（使用`--version`），用于生成V1-V4不同版本的指纹图。
+-   `feature_extractor.py`: 提取传统的数值特征，用于训练基线模型。
+-   `train_control_model.py`: 使用分层K折交叉验证，训练并评估一个强大的基线模型（随机森林）。
+-   `train_cnn.py`: 一个参数化的脚本（使用`--dataset_dir`和`--output_file`），用于在任意版本的指纹图数据集上训练和评估CNN。
+-   `compare_versions.py`: 一个专门的脚本，可自动加载所有版本的CNN实验结果，并生成最终的横向对比可视化图表。
+-   `requirements.txt`: 一个灵活的Python依赖包列表，用于复现项目环境。
 
-## 如何运行完整实验流程
+## 如何运行完整的多版本对比实验
 
-请按以下步骤顺序执行，以复现完整的实验。
+请遵循以下步骤，以复现完整的对比实验流程。
 
 **第一步：配置环境**
 ```bash
 pip install -r requirements.txt
 ```
 
-**第二步：生成仿真原始数据与指纹图**
+**第二步：生成基础原始数据**
 ```bash
 python data_generator.py
-python fingerprint_generator.py
 ```
 
-**第三步：提取特征并训练基线模型**
+**第三步：生成所有版本的指纹图数据集**
 ```bash
-python feature_extractor.py
-python train_control_model.py
+# 依次生成每个版本
+python fingerprint_generator.py --version V1
+python fingerprint_generator.py --version V2
+python fingerprint_generator.py --version V3
+python fingerprint_generator.py --version V4
 ```
-该步骤将训练随机森林模型，进行评估，并将其结果保存到`rf_results.json`中。
 
-**第四步：训练优化后的CNN模型（建议在GPU环境中运行）**
+**第四步：为每个版本的指纹图训练CNN模型**
+这是一个计算密集型步骤，**强烈建议在GPU环境（如Google Colab）中运行**。
 ```bash
-python train_cnn.py
+# 依次为每个数据集运行训练
+python train_cnn.py --dataset_dir sedentary_images_dataset_v1 --output_file cnn_results_v1.json
+python train_cnn.py --dataset_dir sedentary_images_dataset_v2 --output_file cnn_results_v2.json
+python train_cnn.py --dataset_dir sedentary_images_dataset_v3 --output_file cnn_results_v3.json
+python train_cnn.py --dataset_dir sedentary_images_dataset_v4 --output_file cnn_results_v4.json
 ```
-该步骤将训练我们最终优化后的CNN模型（包含数据增强和更深的网络结构），进行评估，并将其结果保存到`cnn_results.json`中。
-*重要提示：此脚本的计算量较大，是为在**GPU环境（如Google Colab, Kaggle Notebooks或云服务器）**中运行而设计的。在标准的CPU环境中，训练过程可能会非常缓慢或因超时而失败。*
 
-**第五步：生成对比可视化图表**
+**第五步：生成最终的横向对比可视化图表**
+该脚本会自动查找所有`cnn_results_v*.json`文件并进行比较。
 ```bash
-python generate_comparative_plots.py
+python compare_versions.py
 ```
-该步骤将加载两个模型生成的`.json`结果文件，并生成最终的对比图（如`performance_distribution.png`, `normalized_confusion_matrices.png`等）。
-
-## 当前结果与未来工作
-
-我们目前的实验结果显示：
--   **基线模型 (随机森林):** 表现非常强大，通过10折交叉验证获得了**约89.7%**的平均准确率。
--   **初步CNN模型:** 作为一个概念验证，取得了**约73.3%**的平均准确率。
-
-当前存在的性能差距为未来的研究指明了方向。`train_cnn.py`脚本中已经实现了一个更深、更优的CNN架构（包含数据增强和批归一化）。下一步的核心工作，是在一个更强大的计算环境（例如云端GPU服务器）中，对这个优化后的模型进行充分的训练，以完全释放“生理指纹图”方法的潜力，并有望超越我们强大的基线模型。
+运行后，将在控制台打印一个总结表格，并保存一张可视化的对比图到`version_accuracy_comparison.png`。
