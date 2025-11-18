@@ -40,27 +40,27 @@ pip install -r requirements.txt
 
 **Step 2: Generate the simulated raw data and fingerprint images**
 ```bash
-python3 data_generator.py
-python3 fingerprint_generator.py
+python data_generator.py
+python fingerprint_generator.py
 ```
 
 **Step 3: Extract features and train the baseline model**
 ```bash
-python3 feature_extractor.py
-python3 train_control_model.py
+python feature_extractor.py
+python train_control_model.py
 ```
 This will train the Random Forest, evaluate it, and save its results to `rf_results.json`.
 
 **Step 4: Train the CNN model**
 ```bash
-python3 train_cnn.py
+python train_cnn.py
 ```
 This will train the CNN, evaluate it, and save its results to `cnn_results.json`.
 *Note: The current `train_cnn.py` contains an advanced architecture that is computationally intensive and may time out in resource-constrained environments.*
 
 **Step 5: Generate comparative visualizations**
 ```bash
-python3 generate_comparative_plots.py
+python generate_comparative_plots.py
 ```
 This will load the `.json` results from the two models and generate the final comparison plots (`performance_distribution.png`, `normalized_confusion_matrices.png`, etc.).
 
