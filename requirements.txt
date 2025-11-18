@@ -4,4 +4,6 @@ pandas
 matplotlib
 seaborn
 scikit-learn
-tensorflow
+torch
+torchvision
+Pillow
